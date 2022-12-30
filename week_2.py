@@ -52,9 +52,12 @@ def ridge_closed ( X, y, l2=0 ):
     """
     assert(len(X.shape)==2)
     assert(X.shape[0]==len(y))
+
+    # Remove intercept term from regularization
+    I_mod = np.identity(X.shape[1])
+    I_mod[0,0] = 0.0 
     
-    # TODO: implement this
-    return None
+    return np.linalg.solve(X.T @ X + l2 * I_mod, X.T @ y)
 
 
 # -- Question 2 --
@@ -78,8 +81,14 @@ def monomial_projection_1d ( X, degree ):
     assert(len(X.shape)==2)
     assert(X.shape[1]==1)
 
-    # TODO: implement this
-    return None
+    Xm = np.zeros((X.shape[0], degree+1))
+    Xm[:,0] = 1
+    Xm[:,1] = X[:,0]
+    
+    for i in range(2, degree+1):
+        Xm[:,i] = X[:, 0] ** i
+    
+    return Xm
 
 
 def generate_noisy_poly_1d ( num_samples, weights, sigma, limits, rng ):
@@ -107,8 +116,10 @@ def generate_noisy_poly_1d ( num_samples, weights, sigma, limits, rng ):
               num_samples x 1
         y: a vector of num_samples output values
     """
-    # TODO: implement this
-    return None, None
+    
+    return utils.random_sample(lambda x: utils.affine(monomial_projection_1d(x, len(weights)-1), weights),
+                               1,
+                               num_samples, limits, rng, sigma)
 
     
 def fit_poly_1d ( X, y, degree, l2=0 ):
@@ -130,8 +141,8 @@ def fit_poly_1d ( X, y, degree, l2=0 ):
     assert(X.shape[1]==1)
     assert(X.shape[0]==len(y))
 
-    # TODO: implement this
-    return None
+    Xm = monomial_projection_1d(X, degree)
+    return ridge_closed( Xm, y, l2 )
 
 
 
@@ -167,11 +178,48 @@ def gradient_descent ( z, loss_func, grad_func, lr=0.01,
         zs: a list of the z values at each iteration
         losses: a list of the losses at each iteration
     """
-    # TODO: implement this
-    return None, None
+    
+    # Return variables
+    zs = [z]
+    losses = [loss_func(z)]
+
+    # Stopping criterions
+    delta_loss = np.inf
+    delta_z = np.inf
+
+    # Gradient Descent algo
+    while (len(losses) <= max_iter) and (delta_loss > loss_stop) and (delta_z > z_stop):
+        z_next = zs[-1] - lr * grad_func(zs[-1]) # compute next step location
+        z_next_loss = loss_func(z_next) # compute next step location loss
+
+        zs.append(z_next) # append steps
+        losses.append(z_next_loss) # append losses
+
+        delta_loss = np.abs(losses[-2] - losses[-1]) # loss stopping criterion
+        delta_z = np.linalg.norm(zs[-2] - zs[-1]) # step stopping criterion
+
+    return zs, losses
 
 
 # -- Question 4 --
+
+# - Auxiliary Functions -
+
+# sigmoid function 
+def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
+
+# forward sigmoid pass
+def sigmoid_forward(X, w):
+    return sigmoid(utils.affine(X, w))
+
+# binary cross entropy loss function (eps added for numerical stability)
+def binary_cross_entropy_loss(X, y, w, eps=1e-10):
+    return (-1 / len(y)) * np.sum(y * np.log(sigmoid_forward(X, w) + eps) + (1-y) * np.log(1-sigmoid_forward(X, w) + eps))
+
+# binary cross entropy loss gradient function
+def binary_cross_entropy_gradient(X, y, w):
+    return X.T @ (y - sigmoid_forward(X, w))
 
 def logistic_regression ( X, y, w0=None, lr=0.05,
                           loss_stop=1e-4, weight_stop=1e-4, max_iter=100 ):
@@ -201,9 +249,14 @@ def logistic_regression ( X, y, w0=None, lr=0.05,
     """
     assert(len(X.shape)==2)
     assert(X.shape[0]==len(y))
-    
-    # TODO: implement this
-    return None, None
+
+    if w0 is None: w0 = np.zeros(X.shape[-1])
+
+    return gradient_descent ( w0,
+                              loss_func = lambda z: binary_cross_entropy_loss(X, y, z),
+                              grad_func = lambda z: binary_cross_entropy_gradient(X, y, z),
+                              lr = lr,
+                              loss_stop=loss_stop, z_stop=weight_stop, max_iter=max_iter )
 
 
 #### plotting utilities
