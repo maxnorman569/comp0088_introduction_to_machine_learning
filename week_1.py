@@ -60,8 +60,9 @@ def generate_noisy_linear(num_samples, weights, sigma, limits, rng):
         y: a vector of num_samples output values
     """
     
-    # TODO: implement this
-    return None, None
+    return utils.random_sample(lambda x: utils.affine(x, weights),
+                               len(weights) - 1,
+                               num_samples, limits, rng, sigma)
 
 
 def plot_noisy_linear_1d(axes, num_samples, weights, sigma, limits, rng):
@@ -88,8 +89,17 @@ def plot_noisy_linear_1d(axes, num_samples, weights, sigma, limits, rng):
     assert(len(weights)==2)
     X, y = generate_noisy_linear(num_samples, weights, sigma, limits, rng)
     
-    # TODO: do the plotting
-    utils.plot_unimplemented ( axes, 'Noisy 1D Linear Model' )
+    axes.plot(X, y, color='red', marker='o', linestyle='')
+    
+    y0 = weights[0] + limits[0] * weights[1]
+    y1 = weights[0] + limits[1] * weights[1]
+    axes.plot(limits, (y0, y1), linestyle='dashed', color='green', marker='')
+
+    axes.set_title('Noisy 1D Linear Model')
+    axes.set_xlim(limits[0], limits[1])
+    axes.set_ylim(limits[0], limits[1])
+    axes.set_xlabel('$x$')
+    axes.set_ylabel('$y$')
 
 
 def plot_noisy_linear_2d(axes, resolution, weights, sigma, limits, rng):
@@ -112,12 +122,33 @@ def plot_noisy_linear_2d(axes, resolution, weights, sigma, limits, rng):
     """
     assert(len(weights)==3)
     
-    # TODO: generate the data
-    # TODO: do the plotting
-    utils.plot_unimplemented ( axes, 'Noisy 2D Linear Model' )
+    X, y = utils.grid_sample(lambda x: utils.affine(x, weights), 2, resolution, limits, rng, sigma)
+                       
+    axes.imshow(y.T, cmap='GnBu', origin='lower', extent=(limits[0], limits[1], limits[0], limits[1]) )
+    
+    levels = np.linspace(np.min(y), np.max(y), 10)
+    axes.contour(y.T, levels, colors='white', origin='lower', extent=(limits[0], limits[1], limits[0], limits[1]) )
+
+    axes.set_xlabel('$x_1$')
+    axes.set_ylabel('$x_2$')
+    
+    axes.set_title('Noisy 2D Linear Model')
 
 
 # -- Question 2 --
+def hyperplane_label(X, boundary):
+    """
+    Creates a binary vector of labels 0/1 for linearly seperable data
+
+    # Arguments
+        X: Matrix of inputs 
+        boundary: Weights of boundary
+
+    # Returns
+        labels: binary array of labels of points according to decision boundary
+    """
+    y = utils.affine(X, boundary)
+    return (y > 0).astype(np.float64)
 
 def generate_linearly_separable(num_samples, weights, limits, rng):
     """
@@ -143,8 +174,11 @@ def generate_linearly_separable(num_samples, weights, limits, rng):
               num_samples x (len(weights) - 1)
         y: a vector of num_samples binary labels
     """
-    # TODO: implement this
-    return None, None
+    return utils.random_sample(lambda x: hyperplane_label(x, weights),
+                               count = len(weights) - 1,
+                               num_samples = num_samples,
+                               limits = limits,
+                               rng = rng)
 
 
 
@@ -170,8 +204,30 @@ def plot_linearly_separable_2d(axes, num_samples, weights, limits, rng):
     assert(len(weights)==3)
     X, y = generate_linearly_separable(num_samples, weights, limits, rng)
     
-    # TODO: do the plotting
-    utils.plot_unimplemented ( axes, 'Linearly Separable Binary Data' )
+    # plot the two subsets with different markers & colours
+    axes.plot(X[y < 0.5, 0], X[y < 0.5, 1], color='red', marker='o', linestyle='', label='Class 0')
+    axes.plot(X[y >= 0.5, 0], X[y >= 0.5, 1], color='blue', marker='v', linestyle='', label='Class 1')
+
+    # to draw the boundary line we need to calculate the endpoints
+    # NB: this will fail if either of the coordinate weights is 0.
+    # special case it later
+    y0 = -(weights[0] + limits[0] * weights[1]) / weights[2]
+    y1 = -(weights[0] + limits[1] * weights[1]) / weights[2]
+
+    axes.plot(limits, (y0, y1), linestyle='dashed', color='green', marker='')
+    
+    mid_x = np.sum(limits)/2
+    mid_y = (y0 + y1)/2
+    
+    axes.arrow(mid_x, mid_y, weights[1], weights[2], color='darkorchid', width=0.06, head_width=0.3, overhang=0.3)
+
+    axes.legend(loc='upper left')
+    
+    axes.set_title('Linearly Separable Binary Data')
+    axes.set_xlim(limits[0], limits[1])
+    axes.set_ylim(limits[0], limits[1])
+    axes.set_xlabel('$x_1$')
+    axes.set_ylabel('$x_2$')
 
 
 # -- Question 3 --
@@ -196,8 +252,10 @@ def random_search(function, count, num_samples, limits, rng):
         x: a vector of length count, containing the found features
     """
     
-    # TODO: implement this
-    return None
+    X, y = utils.random_sample(function, count, num_samples, limits, rng)
+    loc = np.argmin(y)
+    
+    return X[loc, :]
 
 
 def grid_search(function, count, num_divisions, limits):
@@ -219,8 +277,10 @@ def grid_search(function, count, num_divisions, limits):
         x: a vector of length count, containing the found features
     """
     
-    # TODO: implement this
-    return None
+    X, y = utils.grid_sample(function, count, num_divisions, limits)
+    loc = np.unravel_index(np.argmin(y), y.shape)
+    
+    return X[loc]
 
 
 def plot_searches_2d(axes, function, limits, resolution,
@@ -253,8 +313,27 @@ def plot_searches_2d(axes, function, limits, resolution,
         None
     """
     
-    # TODO: implement this
-    utils.plot_unimplemented ( axes, 'Sampling Search' )
+    X, y = utils.grid_sample(function, 2, resolution, limits)
+    axes.imshow(y.T, cmap='GnBu', origin='lower', extent=(limits[0], limits[1], limits[0], limits[1]) )
+    
+    levels = np.linspace(np.min(y), np.max(y), 10)
+    axes.contour(y.T, levels, colors='white', origin='lower', extent=(limits[0], limits[1], limits[0], limits[1]) )
+    
+    r1, r2 = random_search(function, 2, num_samples, limits, rng)
+    g1, g2 = grid_search(function, 2, num_divisions, limits)
+    
+    if true_min is not None:
+        axes.plot(true_min[0], true_min[1], color='green', marker='x', linestyle='', label='True')
+
+    axes.plot(r1, r2, color='red', marker='o', linestyle='', label='Random')
+    axes.plot(g1, g2, color='blue', marker='v', linestyle='', label='Grid')
+        
+    axes.legend()
+    
+    axes.set_xlabel('$x_1$')
+    axes.set_ylabel('$x_2$')
+    
+    axes.set_title('Sampling Search')
 
 
 
