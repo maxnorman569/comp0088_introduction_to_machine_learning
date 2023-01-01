@@ -79,7 +79,8 @@ def misclassification ( y, cls, weights=None ):
         err: the misclassification error of the candidate labels
     """
     
-    if weights is None: weights = 1/len(y)
+    if weights is None: 
+        weights = 1/len(y)
     return np.sum(weights * (y != cls))
 
 
