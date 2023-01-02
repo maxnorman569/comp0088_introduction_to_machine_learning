@@ -58,8 +58,32 @@ def generate_margined_binary_data ( num_samples, count, limits, rng ):
               num_samples x count
         y: a vector of num_samples binary labels
     """
-    # TODO: implement this
-    return None, None
+    inset = (limits[1] - limits[0])/6
+    
+    lo = (limits[0] + inset,) * count
+    hi = (limits[1] - inset,) * count
+    
+    cov = (np.eye(count) - 0.1) / (0.2 * inset)
+    
+    X_lo = rng.multivariate_normal(lo, cov, num_samples)
+    X_hi = rng.multivariate_normal(hi, cov, num_samples)
+    
+    y_lo = np.zeros(num_samples, dtype=int)
+    y_hi = np.ones(num_samples, dtype=int)
+    
+    X = np.vstack([X_lo, X_hi])
+    y = np.concatenate((y_lo, y_hi))
+    
+    ix = rng.choice(X.shape[0], X.shape[0], replace=False)
+    
+    X = X[ix, :]
+    y = y[ix]
+    
+    keep = np.all((X > limits[0]) & (X < limits[1]), axis=1)
+    X = X[keep,:]
+    y = y[keep]
+    
+    return X[:num_samples,:], y[:num_samples]
 
 
 def geometric_margin ( X, y, weights, bias ):
@@ -89,8 +113,14 @@ def geometric_margin ( X, y, weights, bias ):
     assert(X.shape[0] == len(y))
     assert(X.shape[1] == len(weights))
     
-    # TODO: implement this
-    return None
+    # correct the labeling for y \in {-1, 1}
+    y_m = np.where(y==1, 1, -1)
+
+    # geometric margin
+    geom_m = (y_m * (np.dot(X, weights) + bias)) / np.linalg.norm(weights)
+
+    # return the minimum geometric margin
+    return np.min(geom_m)
     
 
 # -- Question 2 --
@@ -120,9 +150,26 @@ def perceptron_train ( X, y, alpha=1, max_epochs=50, include_bias=True ):
             the algorithm fails to converge)
     """
     assert(X.shape[0] == len(y))
-    
-    # TODO: implement this
-    return None
+
+    if include_bias: X = utils.add_x0(X)
+
+    # ininitalise weights to 0
+    weights = np.zeros(X.shape[-1])
+
+    # run update algorithm for number of epochs
+    for epoch in range(max_epochs):
+        err_count = 0
+        # loop through training data iteratively
+        for i in range(X.shape[0]):
+            y_pred = 1 if X[i,:] @ weights >= 0 else 0 # (ternary operator)
+            # update weights if classification is incorrect
+            if y_pred != y[i]:
+                err_count += 1
+                weights = weights + (y[i] - y_pred) * alpha * X[i,:]
+        # break if algorithm has converged 
+        if err_count == 0:
+            print(f'perceptron converged after {epoch} epochs')
+            return weights
 
 
 def perceptron_predict ( test_X, weights ):
@@ -148,11 +195,48 @@ def perceptron_predict ( test_X, weights ):
     """
     assert(test_X.shape[1] in (len(weights),len(weights)-1))
     
-    # TODO: implement this
-    return None
+    # add bias if not included
+    if len(weights) > test_X.shape[1]: test_X = utils.add_x0(test_X)
+
+    # assert dimension match
+    assert(test_X.shape[-1] == len(weights)), "X dim != weight dim"
+
+    # make prediction
+    y_pred = np.where((test_X @ weights) >= 0, 1, 0)
+
+    return y_pred
     
 
 # -- Question 3 --
+
+# - Auxiliary Function -
+
+def binary_nonlinear_decision_2d ( X ):
+    """
+    Generates different data patterns 
+    -> comment out to select different patterns
+
+    # Arguments:
+        X: basis feature to be projected
+
+    # Returns:
+        projected features
+    """
+    
+    # stripes
+    tmp = X[:,0] + X[:,1]
+    return (np.floor(tmp/4) == np.floor((tmp+2)/4)).astype(int)
+    
+    # diamond
+    tmp = np.sum(np.abs(X), axis=1)
+    return (tmp > 4).astype(int)
+    
+    # circle
+    tmp = np.sum(X * X, axis=1)
+    return ((tmp > 2.2) & (tmp < 10)).astype(int)
+    
+    # quadrants
+    return ((X[:,0] * X[:,1]) > 0).astype(int)
 
 def generate_binary_nonlinear_2d ( num_samples, limits, rng ):
     """
@@ -177,8 +261,8 @@ def generate_binary_nonlinear_2d ( num_samples, limits, rng ):
               num_samples x count
         y: a vector of num_samples binary labels
     """
-    # TODO: implement this
-    return None, None
+    return utils.random_sample( binary_nonlinear_decision_2d,
+                                num_samples=num_samples, limits=limits, rng=rng )
 
 
 # -- Question 4 --
@@ -206,8 +290,18 @@ def custom_kernel ( X1, X2, gamma=0.5 ):
     """
     assert(X1.shape[1] == X2.shape[1])
     
-    # TODO: implement this
-    return None
+    # kernel below is like a Gaussian but using the L1 norm
+    # this has slightly different convergence, although it's
+    # probably not actually useful for very much!
+
+    if gamma is None:
+        gamma = 1 / (X1.shape[1] * X1.var())
+        
+    result = np.zeros((X1.shape[0], X2.shape[0]))
+    for x1 in range(X1.shape[0]):
+        for x2 in range(X2.shape[0]):
+            result[x1,x2] = np.exp(-gamma * np.max(np.abs(X1[x1,:] - X2[x2,:]))**2)
+    return result
 
 
 #### TEST DRIVER
