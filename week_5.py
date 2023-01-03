@@ -44,8 +44,13 @@ def relu ( z ):
             as the input value, giving the ReLU of
             of each input value
     """
-    # TODO: implement this
-    return None
+    # compute activations
+    a = np.maximum(z, 0)
+
+    # assert dimensions match
+    assert z.shape == a.shape, "dim(z) != dim(a)"
+
+    return a
 
 def d_relu ( z ):
     """
@@ -59,8 +64,13 @@ def d_relu ( z ):
             as the input value, giving the gradient
             of the ReLU function at each input value
     """
-    # TODO: implement this
-    return None
+    # compute gradients
+    d_a = np.where(z >= 0, 1, 0)
+
+    # assert dimensions match
+    assert z.shape == d_a.shape, "dim(z) != dim(a)"
+
+    return d_a
 
 def sigmoid ( z ):
     """
@@ -74,8 +84,13 @@ def sigmoid ( z ):
             as the input value, giving the sigmoid (logistic)
             output for each input value
     """
-    # TODO: implement this
-    return None
+    # compute activations
+    a = 1 / (1 + np.exp(-z))
+
+    # assert dimensions
+    assert z.shape == a.shape, "dim(z) != dim(a)"
+
+    return a
 
 def d_sigmoid ( z ):
     """
@@ -89,8 +104,13 @@ def d_sigmoid ( z ):
             as the input value, giving the gradient
             of the sigmoid function at each input value
     """
-    # TODO: implement this
-    return None
+    # compute derivatives
+    d_a = sigmoid(z) * (1 - sigmoid(z))
+
+    # assert dimensions
+    assert z.shape == d_a.shape, "dim(z) != dim(a)"
+
+    return d_a
 
 def binary_crossentropy_loss ( y, y_hat, eps=1e-10 ):
     """
@@ -112,8 +132,13 @@ def binary_crossentropy_loss ( y, y_hat, eps=1e-10 ):
             the same shape as y_hat irrespective of the
             shape of y
     """
-    # TODO: implement this
-    return None
+    # make y * y_hat have same shape
+    y = y.reshape(y_hat.shape)
+
+    # binary crossentropy loss
+    loss = -( y * np.log(y_hat + eps) + (1 - y) * np.log(y_hat + eps) )
+
+    return loss
 
 def d_binary_crossentropy_loss ( y, y_hat, eps=1e-10 ):
     """
@@ -135,11 +160,40 @@ def d_binary_crossentropy_loss ( y, y_hat, eps=1e-10 ):
             the same shape as y_hat irrespective of the
             shape of y
     """
-    # TODO: implement this
-    return None
+    # make y & y_hat have same shape
+    y = y.reshape(y_hat.shape)
+
+    # compute derivative
+    d_loss = ( y_hat - y ) / ( y_hat * (1 - y_hat) + eps )
+
+    return d_loss
 
 
 # -- Question 2 --
+
+# - Auxiliary Function 
+def uniform_he_initialisation( fan_in, fan_out, rng ):
+    """
+    Initialises weights of layer according to He initialisation
+
+    # Arguments:
+        fan_in: the number of incoming connections
+        fan_out: the number of outgoing connections
+        rng: an instance of numpy.random.Generator
+            from which to draw random numbers
+
+    # Returns:
+        W: initialised weight matrix
+    """
+
+    # uniform He initialisation
+    lim = np.sqrt( 6 / fan_in )
+
+    # draw weights
+    W = rng.uniform(size=(fan_in, fan_out)) * 2 * lim - lim  
+
+    return W
+
 
 def init_layer ( fan_in, fan_out, act, rng ):
     """
@@ -158,9 +212,14 @@ def init_layer ( fan_in, fan_out, act, rng ):
             keys 'W', 'b', 'shape' and 'act'.
             (See the coursework for full details.)
     """
-    # TODO: implement this
-    return None
+    # layer dictionary
+    layer_dict = {  'W' : uniform_he_initialisation( fan_in, fan_out, rng ),
+                    'b' : np.zeros(fan_out),
+                    'shape' : f'{fan_in} -> {fan_out}',
+                    'act' : act }
 
+    return layer_dict
+               
 
 def init_mlp ( spec, rng ):
     """
@@ -172,7 +231,7 @@ def init_mlp ( spec, rng ):
             specifying the configuration of the network layers.
             there must be at least 2 elements; the last is only
             used to determine output size of the layer before,
-            it does not create a layer of its own
+            it does not create a layer of its own -> (reason for -1 in range)
         rng: an instance of numpy.random.Generator
             from which to draw random numbers
     
@@ -181,8 +240,10 @@ def init_mlp ( spec, rng ):
     """
     assert(len(spec) > 1)
     
-    # TODO: implement this
-    return None
+    # loop through iterable to build layers
+    mlp = [ init_layer( spec[nn][0], spec[nn+1][0], spec[nn][1], rng ) for nn in range(len(spec) - 1) ]
+
+    return mlp
 
 
 # -- Question 3 --
@@ -206,8 +267,12 @@ def layer_forward ( layer, X ):
     """
     assert(X.shape[-1] == layer['W'].shape[0])
 
-    # TODO: implement this
-    return None
+    # storing intermediate values
+    layer['X'] = X
+    layer['Z'] = X @ layer['W'] + layer['b']
+    layer['A'] = sigmoid(layer['Z']) if layer['act']=='sigmoid' else relu(layer['Z'])
+
+    return layer['A']
 
 
 def mlp_forward ( mlp, X ):
@@ -224,9 +289,11 @@ def mlp_forward ( mlp, X ):
     # Returns
         A: the output activations of the final network layer
     """
-    # TODO: implement this
-    return None
+    # loop through layers running forward pass recursively
+    for layer in mlp:
+        X = layer_forward ( layer, X )
 
+    return X
 
 
 # -- Question 4 --
@@ -249,8 +316,14 @@ def layer_backward ( layer, dA ):
     """
     assert(dA.shape == layer['A'].shape)
     
-    # TODO: implement this
-    return None
+    # storing intermediate values
+    layer['dA'] = dA
+    layer['dZ'] = dA * (d_sigmoid(layer['Z']) if layer['act']=='sigmoid' else d_relu(layer['Z']))
+    layer['dX'] = (layer['dZ'] @ layer['W'].T)
+    layer['dW'] = (layer['X'].T @ layer['dZ'])
+    layer['db'] = np.sum(layer['dZ'], axis=0)
+
+    return layer['dX']
 
 
 
@@ -268,8 +341,9 @@ def mlp_backward ( mlp, d_loss ):
     # Returns
         None
     """
-    # TODO: implement this
-    pass
+    # propagate loss through backwards through the network
+    for layer in mlp[::-1]:
+        d_loss = layer_backward ( layer, d_loss )
 
 
 # -- Question 5 --
@@ -287,8 +361,9 @@ def layer_update ( layer, lr ):
     # Returns
         None
     """
-    # TODO: implement this
-    pass
+    # update using gradient descent
+    layer['W'] = layer['W'] - lr * layer['dW']
+    layer['b'] = layer['b'] - lr * layer['db']
 
     
 
@@ -305,8 +380,9 @@ def mlp_update ( mlp, lr ):
     # Returns
         None
     """
-    # TODO: implement this
-    pass
+    # loop through network updating layers
+    for layer in mlp:
+        layer_update(layer, lr)
 
 
 # -- Question 6 --
@@ -331,8 +407,14 @@ def mlp_minibatch ( mlp, X, y, lr ):
     assert(X.shape[0] == len(y))
     assert(X.shape[-1] == mlp[0]['W'].shape[0])
     
-    # TODO: implement this
-    return None
+    # update network based on single mini-batch
+    y_hat = mlp_forward ( mlp, X )
+    loss = binary_crossentropy_loss ( y, y_hat )
+    d_loss = d_binary_crossentropy_loss ( y, y_hat )
+    mlp_backward ( mlp, d_loss )
+    mlp_update( mlp, lr )
+    
+    return np.sum(loss)/len(y)
 
 
 def mlp_epoch ( mlp, X, y, batch, lr, rng ):
@@ -355,8 +437,16 @@ def mlp_epoch ( mlp, X, y, batch, lr, rng ):
     # Returns
         loss: the mean training loss over the whole dataset    
     """
-    # TODO: implement this
-    return None
+    # run training epochs
+    N = len(y)
+    loss = []
+    perm = rng.permutation( N )
+
+    for start in range(0, N, batch):
+        ix = perm[start:(start + batch)]
+        loss.append(mlp_minibatch(mlp, X[ix,:], y[ix], lr))
+    
+    return np.mean(loss)
 
 
 def mlp_train ( mlp, X, y, batch, epochs, lr, rng ):
@@ -380,8 +470,12 @@ def mlp_train ( mlp, X, y, batch, epochs, lr, rng ):
     # Returns
         loss: a list of the mean training loss at each epoch    
     """
-    # TODO: implement this
-    return None
+    # train neural network
+    loss = []
+    for epoch in range(epochs):
+        loss.append(mlp_epoch(mlp, X, y, batch, lr, rng))
+    
+    return loss
 
 
 
@@ -401,8 +495,10 @@ def mlp_predict ( mlp, X, thresh=0.5 ):
     # Returns
         y_hat: a vector of predicted binary labels for X
     """
-    # TODO: implement this
-    return None
+    # make predictions
+    y_pred = (mlp_forward(mlp, X).ravel() > thresh).astype(int) 
+
+    return y_pred
 
 
 #### TEST DRIVER
