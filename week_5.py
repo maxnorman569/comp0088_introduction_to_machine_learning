@@ -408,13 +408,20 @@ def mlp_minibatch ( mlp, X, y, lr ):
     assert(X.shape[-1] == mlp[0]['W'].shape[0])
     
     # update network based on single mini-batch
+        # make prediction
     y_hat = mlp_forward ( mlp, X )
+        # evaluate loss
     loss = binary_crossentropy_loss ( y, y_hat )
+        # caclulate gradient of loss
     d_loss = d_binary_crossentropy_loss ( y, y_hat )
-    mlp_backward ( mlp, d_loss )
+        # propagate loss backwards
+    mlp_backward ( mlp, d_loss ) 
+        # use gradients to update NN
     mlp_update( mlp, lr )
+
+    loss_  = np.sum(loss)/len(y)
     
-    return np.sum(loss)/len(y)
+    return loss_
 
 
 def mlp_epoch ( mlp, X, y, batch, lr, rng ):
