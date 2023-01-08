@@ -150,11 +150,25 @@ def compute_wcss(data, centroids, assignments):
     # Returns:
         wcss: the WCSS across all clusters.
     """
-    # TODO: implement the within cluster sum of squares
-    return None
+    
+    # store of calculated wcss
+    within_sample_variances = np.zeros( len(centroids) )
+
+    for i in range( len(within_sample_variances) ):
+        # get assigned data
+        assigned = data[assignments == i]
+
+        # if assignment is non-empty caculate within sample variance for cluster
+        if len( assigned ) > 0: within_sample_variances[i] = np.sum( np.linalg.norm(centroids[i] - assigned, axis=1) ** 2 ) / len(assigned)
+        else: within_sample_variances[i] = 0
+
+    # compute within cluster sum of squares
+    wcss = np.mean( within_sample_variances )
+
+    return wcss
 
 
-def k_means_clustering(data, rng, k=3, init="forgy", max_iter=500):
+def k_means_clustering( data, rng, k=3, init="forgy", max_iter=500 ):
     """
     Method for implementing k-means clustering.
 
@@ -171,10 +185,45 @@ def k_means_clustering(data, rng, k=3, init="forgy", max_iter=500):
         n_iter: the number of iterations needed by the algorithm.
         centroids: the centroids after convergence.
     """
-    # TODO: implement the k-means clustering algorithm
-    return None, None, None
+    assignments = np.zeros(data.shape[0])
+    converged = False
+    n_iter = 0
 
+    if init == "forgy":
+        centroids = rng.choice(data, k)
+    elif init == "naive":
+        centroids = rng.uniform(
+            low=np.min(data), high=np.max(data), size=(k, data.shape[1])
+        )
+    else:
+        print(f"Wrong initialisation {init} specified.")
+        exit()
 
+    while not converged and n_iter < max_iter:
+        converged = True
+        n_iter += 1
+
+        for i, sample in enumerate(data):
+            c = np.argmin(
+                np.linalg.norm(
+                    np.repeat(np.expand_dims(sample, axis=0), k, axis=0) - centroids,
+                    axis=1,
+                )
+                ** 2
+            )
+
+            converged &= assignments[i] == c
+            assignments[i] = c
+
+        for i in range(k):
+            centroids[i] = np.nanmean(data[assignments == i], axis=0)
+
+        wcss = compute_wcss(data, centroids, assignments)
+        print(f"WCSS for iter {n_iter}:\t{wcss:.5f}")
+
+    return assignments, n_iter, centroids
+
+ 
 def image_colour_quantisation(img, k, max_iter, rng):
     """
     Perform image colour quantisation on the provided input image.
@@ -192,8 +241,13 @@ def image_colour_quantisation(img, k, max_iter, rng):
             sequentialised image after the colour channels C have
             been assigned to the k clusters using the k-means algorithm.
     """
-    # TODO: implement image colour quantisation using the k-means algorithm.
-    return None
+    img_seq = img.reshape(-1, img.shape[-1]).copy()
+    assignments, _, centroids = k_means_clustering(img_seq, rng, k=k, max_iter=max_iter)
+
+    for idx, i in enumerate(assignments):
+        img_seq[idx] = centroids[int(i)]
+
+    return img_seq
 
 
 def load_word_embeddings(path):
@@ -235,8 +289,13 @@ def get_nearest_neighbours(query, embeddings, labels, n=10):
             for query (INCLUDING query itself).
     """
     assert query in labels, print(f"No embedding for word {query}")
-    # TODO: find the nearest neighbours for word 'query' in 'embeddings'
-    return None
+
+    query_embedding = embeddings[labels.index(query)]
+    dists = np.array([distance.cosine(x, query_embedding) for x in embeddings])
+    dists_sorted = np.argsort(dists)
+    nearest = [labels[idx] for idx in dists_sorted[:n]]
+    return nearest
+
 
 
 def pca_eigen(data, n):
@@ -251,9 +310,11 @@ def pca_eigen(data, n):
         The transformed data, truncated at n along the
             second dimension (shape (N, n)).
     """
-    # TODO: transform the input data using PCA and
-    # return only the n principal components
-    return None
+    cov = (data.T @ data) / data.shape[0]
+    eigenvalues, eigenvectors = np.linalg.eig(cov)
+    eigenvectors = eigenvectors[:, np.argsort(-eigenvalues)]
+    transformed = data @ eigenvectors
+    return transformed[:, :n]
 
 
 def pca_svd(data, n):
@@ -268,9 +329,9 @@ def pca_svd(data, n):
         The transformed data, truncated at n along the
             second dimension (shape (N, n)).
     """
-    # TODO: transform the input data using PCA and
-    # return only the n principal components
-    return None
+    v, d, _ = np.linalg.svd(data, full_matrices=False)
+    transformed = v @ np.diag(d)
+    return transformed[:, :n]
 
 
 def pca(data, method="eigen", n_pcs=2):

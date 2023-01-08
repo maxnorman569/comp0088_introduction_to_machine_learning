@@ -101,9 +101,33 @@ def train_epoch(model, dataloader, loss_function, optimiser):
         loss: mean loss over the whole epoch
         accuracy: mean prediction accuracy over the epoch
     """
-    # TODO: implement this
-    return None, None
+    # training variables 
+    t0 = perf_counter()
+    model.train()
+    size = len(dataloader.dataset)
+    total_loss, correct = 0, 0
 
+    # iterate through dataloader to train model
+    for batch, (X, y) in enumerate(dataloader):
+        X = X.to(device)
+        y = y.to(device)
+        # make prediction and compute loss
+        pred = model(X)
+        loss = loss_function(pred, y)
+        total_loss += loss.item()
+        correct += (pred.argmax(1) == y).type(torch.float).sum().item()
+        # update model parameters
+        optimiser.zero_grad()
+        loss.backward()
+        optimiser.step()
+        # print loss and batch for every 100th iteration
+        if batch % 100 == 0:
+            loss, current = loss.item(), batch * len(X)
+            print(f'loss: {loss:>5f} [{current:>5d}/{size:>5d}, {perf_counter() - t0:.1f}s]')
+    
+    print(f'Total time for epoch: {perf_counter()-t0:.2f} seconds')
+    
+    return total_loss/size, correct/size
 
 def test_epoch(model, dataloader, loss_function):
     """
@@ -119,8 +143,27 @@ def test_epoch(model, dataloader, loss_function):
         loss: mean loss over the whole epoch
         accuracy: mean prediction accuracy over the epoch
     """
-    # TODO: implement this
-    return None, None
+    # test variables 
+    t0 = perf_counter()
+    model.eval()
+    size = len(dataloader.dataset)
+    loss, correct = 0, 0
+    
+    # make predictions and compute loss
+    with torch.no_grad():
+        for X, y in dataloader:
+            X = X.to(device)
+            y = y.to(device)
+            pred = model(X)
+            loss += loss_function(pred, y).item()
+            correct += (pred.argmax(1) == y).type(torch.float).sum().item()
+    
+    # get acc and avg loss
+    loss /= size
+    correct /= size
+    print(f'\nTest Results: Accuracy: {(100 * correct):>0.1f}%, Mean Loss: {loss:>5f}\n')
+    
+    return loss, correct
 
 
 # -- Question 2 --
@@ -146,7 +189,14 @@ class MLP(Model):
             output: the output size for the final layer
         """
         super().__init__(input, output)
-        # TODO: implement this
+
+        layers = [ nn.Flatten() ] # iterable of "layers"
+        nodes = [input] + spec + [output] # itertable of node sizes
+        # loop through node size to create layers
+        for i in range(len(nodes)-1):
+            layers += [ nn.Linear(nodes[i], nodes[i+1]), nn.ReLU() ]
+        
+        self.mlp = nn.Sequential(*layers)
     
     def forward(self, x):
         """
@@ -158,9 +208,7 @@ class MLP(Model):
         # Returns
             output tensor from the last layer
         """
-        
-        # TODO: remove line below and implement this
-        return super().forward(x)
+        return self.mlp(x)
 
 
 # -- Question 3 --
@@ -186,8 +234,26 @@ class CNN(Model):
             padding: amount of padding to add around each layer before convolving
         """
         super().__init__(np.prod(input), output)
+        # assert that No.of channels is not 0 (i.e input/output exists)
         assert(len(spec) > 0)
-        # TODO: implement this
+        
+        # iterable of layers containing first layer
+        layers = [ nn.Conv2d(input[0], spec[0], kernel_size=kernel, stride=stride, padding=padding), nn.ReLU() ]
+        
+        # output size of first layers
+        out_size = int(np.floor(1 + (input[1] + 2 * padding - kernel) / stride))
+        
+        #loop through spec sizes adding layers
+        for i in range(len(spec) - 1):
+            layers += [ nn.Conv2d(spec[i], spec[i+1], kernel_size=kernel, stride=stride, padding=padding), nn.ReLU() ] # add layer to iterable
+            out_size = int(np.floor(1 + (out_size + 2 * padding - kernel) / stride)) # compute output size for next layer
+        
+        # output layer is FC layer
+        layers += [ nn.Flatten(), nn.Linear(out_size * out_size * spec[-1], output) ]
+        
+        self.cnn = nn.Sequential(*layers)
+
+        
     
     def forward(self, x):
         """
@@ -199,8 +265,8 @@ class CNN(Model):
         # Returns
             output tensor from the last layer
         """
-        # TODO: remove line below and implement this
-        return super().forward(x)
+        
+        return self.cnn(x)
 
 
 # -- Question 4 --
@@ -229,7 +295,23 @@ class RNN(Model):
                 (anything else): use nn.RNN
         """
         super().__init__(np.prod(input), output)
-        # TODO: implement this
+        
+        # RNN params
+        self.input_size = input[0] * input[2]   # channels * columns
+        self.seq_size = input[1]                # rows
+        self.hidden_size = spec[0]
+        self.num_layers = spec[1] if len(spec) > 1 else 1
+        self.output = output
+        self.unit_type = unit_type
+        
+        # model classes 
+        cls = {
+            'lstm' : nn.LSTM,
+            'gru' : nn.GRU,
+        }.get(unit_type, nn.RNN)
+        
+        self.rnn = cls(input_size=self.input_size, hidden_size=spec[0], num_layers=spec[1], batch_first=True)
+        self.fc = nn.Linear(spec[0], output)
     
     def forward(self, X):
         """
@@ -241,8 +323,13 @@ class RNN(Model):
         # Returns
             output tensor from the last layer
         """
-        # TODO: remove line below and implement this
-        return super().forward(x)
+        # move channels to end before reshaping
+        X = X.permute(0,2,3,1).reshape(-1, self.seq_size, self.input_size)
+        out, _ = self.rnn(X)
+        
+        # out shape: (batch_size, input_size, hidden_size)
+        # use the last step for each input sequence as input to classifier layer
+        return self.fc(out[:, -1, :])
 
 
 
